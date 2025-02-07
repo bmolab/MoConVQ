@@ -1,11 +1,11 @@
 ---
 env:
-  scene_fname: Data/Misc/world.json
+  scene_fname: ../MoConVQ/Data/Misc/world.json
   fps: 20
 
-bvh_folder: Data\Motion
+bvh_folder: ..\MoConVQ\Data\Motion
 # motion_dataset: ./data.h5
-motion_dataset: ./simple_motion_data.h5
+motion_dataset: ../MoConVQ/simple_motion_data.h5
 clip_feature_set: None #./lafan_big_fixed.h5
 collect_size: 1024
 
