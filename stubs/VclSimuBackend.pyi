@@ -8104,6 +8104,11 @@ class pymotionlib:
             BVHLoader.load_from_string(unicode bvh_str: str, insert_T_pose: bool = False, ignore_root_offset=True, max_frames=None, ignore_root_xz_pos=False)
             """
         @staticmethod
+        def load_amass_npz(bvh_str: unicode, smpl_str: unicode, insert_T_pose: bool = False, ignore_root_offset = True, max_frames = None, ignore_root_xz_pos = False):
+            """
+            BVHLoader.load_from_string(unicode bvh_str: str, unicode smpl_str: str, insert_T_pose: bool = False, ignore_root_offset=True, max_frames=None, ignore_root_xz_pos=False)
+            """
+        @staticmethod
         def save(data, fn: unicode, fmt: unicode = '%10.6f', euler_order: unicode = 'XYZ', translational_joints = False, insert_T_pose: bool = False):
             """
             BVHLoader.save(data, unicode fn: str, unicode fmt: str = u'%10.6f', unicode euler_order: str = u'XYZ', translational_joints=False, insert_T_pose: bool = False)

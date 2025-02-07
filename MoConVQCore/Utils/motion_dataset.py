@@ -54,11 +54,11 @@ class MotionDataSet():
             'future_std': future_std
         }
     
-    def add_bvh_with_character(self, name, character, flip = False):
+    def add_bvh_with_character(self, name, character, flip = False, smpl_path=""):
         if flip:
-            target = BVHToTargetBase(name, self.fps, character, flip = np.array([1,0,0])).init_target()
+            target = BVHToTargetBase(name, self.fps, character, flip = np.array([1,0,0]), smpl_path=smpl_path).init_target()
         else:
-            target = BVHToTargetBase(name, self.fps, character).init_target()
+            target = BVHToTargetBase(name, self.fps, character, smpl_path=smpl_path).init_target()
         tarset : SetTargetToCharacter = SetTargetToCharacter(character, target)
 
         state, ob, done = [],[],[] 
@@ -357,3 +357,57 @@ class HDF5MotionDataset():
                 layout[self.cum_num[i]:self.cum_num[i+1]] = source
             self.motions_file.create_virtual_dataset('virtual_'+attribute, layout, fillvalue = 0)
             setattr(self, attribute, self.motions_file['virtual_'+attribute])  
+
+class DPGMotionDataset(MotionDataSet):
+    def __init__(self, fps, character, flip = None):
+        super().__init__(fps)
+        if flip:
+            self.target_base = BVHToTargetBase(None, self.fps, character, flip = np.array([1,0,0]))
+        else:
+            self.target_base = BVHToTargetBase(None, self.fps, character)
+        self.curr_target_frame = 0
+        self.character = character
+        self.flip = np.array([1,0,0]) if flip else None
+            
+
+    def add_motion_with_character(self, trans, rot):
+      self.target_base.bvh.append_trans_rotation(trans, rot)
+      # handle dataset processing
+      self.target_base.bvh._joint_position = None
+      self.target_base.bvh._joint_orientation = None
+      self.target_base.bvh.align_joint_rotation_representation()
+      self.target_base.bvh.recompute_joint_global_info()
+      self.target_base.bvh.to_contiguous()
+      self.target_base.init_bvh(self.character, self.fps, self.flip)
+
+      target = self.target_base.init_target()
+      tarset : SetTargetToCharacter = SetTargetToCharacter(self.character, target)
+
+      state, ob, done = [],[],[] 
+      
+      offset = np.zeros(3)
+      for i in range(10):
+          tarset.set_character_byframe(i)
+          aabb = self.character.get_aabb()
+          offset += np.array([0,-aabb[2]+1e-3,0])
+      offset /= 10
+      # offset[1] -= 0.05
+      
+      for i in range(self.curr_target_frame, target.num_frames):
+          tarset.set_character_byframe(i)
+          self.character.move_character_by_delta(offset)
+          state_tmp = character_state(self.character)
+          ob_tmp =  state2ob(torch.from_numpy(state_tmp)).numpy()
+          done_tmp = (i == (target.num_frames -1))
+          state.append(state_tmp[None,...])
+          ob.append(ob_tmp.flatten()[None,...])
+          done.append(np.array(done_tmp).reshape(1,1))
+
+      self.curr_target_frame = target.num_frames
+      state = np.concatenate(state, axis = 0)
+      future = states2future(state)
+      
+      self.state = add_to_list(state, self.state)
+      self.observation = add_to_list(ob, self.observation)
+      self.done = add_to_list(done, self.done)
+      self.future = add_to_list(future, self.future)

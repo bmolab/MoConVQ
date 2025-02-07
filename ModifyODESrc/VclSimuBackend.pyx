@@ -26,6 +26,7 @@ cimport numpy as np
 cimport cython
 import weakref
 np.import_array()
+from anim import amass
 
 cdef class GeomTypes:
     Sphere = dSphereClass
@@ -10212,6 +10213,84 @@ class pymotionlib:
             return data
 
         @staticmethod
+        def load_amass_npz(
+            npz_str: str,
+            smpl_path: str,
+            insert_T_pose: bool = False,
+            ignore_root_offset=True,
+            max_frames=None,
+            ignore_root_xz_pos=False,
+            MCVQ_JOINTS=[],
+            MCVQ_JOINT_OFFSETS=[],
+            AMASS_JOINT_MAP={}
+        ):
+            data = pymotionlib.MotionData.MotionData()
+            motion = amass.load(amass_motion_path=npz_str,
+                              smplh_path=smpl_path)
+
+            data._fps = motion.fps
+            data._num_frames = len(motion.trans)
+            data._num_joints = len(MCVQ_JOINTS)
+            indexMap = {}
+            for i, joint in enumerate(motion.joint_names): # old names
+              if joint in AMASS_JOINT_MAP:
+                indexMap[AMASS_JOINT_MAP[joint]] = i
+  
+            data._skeleton_joint_offsets = np.array(MCVQ_JOINT_OFFSETS)
+            data._joint_translation = np.zeros((data._num_frames, data._num_joints, 3))
+            data._joint_rotation = np.zeros((data._num_frames, data._num_joints, 4))
+            data._joint_rotation[:, :, -1] = 1
+            data._joint_translation[:, 0, :] = motion.trans / 100
+            for i, joint in enumerate(MCVQ_JOINTS):
+              if joint in indexMap:
+                data._joint_rotation[:, i, :] = np.roll(motion.quats[:, indexMap[joint], :], 3, axis=-1)
+
+
+            data._joint_rotation[:, 0, :] = -1 * data._joint_rotation[:, 0, :]
+            if ignore_root_offset:
+              data._skeleton_joint_offsets[0].fill(0)
+
+            data._skeleton_joints = MCVQ_JOINTS
+            data._skeleton_joint_parents = [-1, 0, 1, 2, 3, 4, 0, 6, 7, 8, 9, 0, 11, 12, 13, 12, 15, 16, 17, 18, 12, 20, 21, 22, 23]
+            data._end_sites = [5, 10, 14, 19, 24]
+            data._joint_position = None
+            data._joint_orientation = None
+            data.align_joint_rotation_representation()
+            data.recompute_joint_global_info()
+            data.to_contiguous()
+
+            return data
+      
+
+        @staticmethod
+        def create_empty_motion(
+            fps: int,
+            insert_T_pose: bool = False,
+            ignore_root_offset=True,
+            max_frames=None,
+            ignore_root_xz_pos=False,
+            MCVQ_JOINTS=[],
+            MCVQ_JOINT_OFFSETS=[],
+            AMASS_JOINT_MAP={}
+        ):
+            data = pymotionlib.MotionData.MotionData()
+            data._fps = fps
+            data._num_frames = 0
+            data._num_joints = len(MCVQ_JOINTS)
+            data._skeleton_joint_offsets = np.array(MCVQ_JOINT_OFFSETS)
+            if ignore_root_offset:
+              data._skeleton_joint_offsets[0].fill(0)
+
+            data._skeleton_joints = MCVQ_JOINTS
+            data._skeleton_joint_parents = [-1, 0, 1, 2, 3, 4, 0, 6, 7, 8, 9, 0, 11, 12, 13, 12, 15, 16, 17, 18, 12, 20, 21, 22, 23]
+            data._end_sites = [5, 10, 14, 19, 24]
+
+            data._joint_position = None
+            data._joint_orientation = None
+            
+            return data
+            
+        @staticmethod
         def save(data, fn: str, fmt: str = '%10.6f', euler_order: str = 'XYZ', translational_joints=False,
                 insert_T_pose: bool = False):
             dirname = os.path.dirname(fn)
@@ -13675,8 +13754,67 @@ class ODESim:
                 bvh_end: Optional[int] = None,
                 set_init_state_as_offset: bool = False,
                 smooth_type: Union[Common.SmoothOperator.GaussianBase, Common.SmoothOperator.ButterWorthBase, None] = None,
-                flip = None
+                flip = None,
+                smpl_path: str = "",
+                motion_fps: int = None # fps for live motion
             ):
+                MCVQ_JOINTS = ['RootJoint', 'lHip', 'lKnee', 'lAnkle', 'lToeJoint',
+                  'lToeJoint_end', 'rHip', 'rKnee', 'rAnkle', 'rToeJoint',
+                  'rToeJoint_end', 'pelvis_lowerback', 'lowerback_torso',
+                  'torso_head', 'torso_head_end', 'lTorso_Clavicle', 'lShoulder',
+                  'lElbow', 'lWrist', 'lWrist_end', 'rTorso_Clavicle',
+                  'rShoulder', 'rElbow', 'rWrist', 'rWrist_end']
+
+                MCVQ_JOINT_OFFSETS = [
+                    [0.0, 0.0, 0.0],
+                    [0.1, -0.051395, 0.0],
+                    [0.0, -0.41, 0.0],
+                    [0.0, -0.39, 0.0],
+                    [0.0, -0.05, 0.13],
+                    [0.01, 0.002, 0.06],
+                    [-0.1, -0.051395, 0.0],
+                    [0.0, -0.41, 0.0],
+                    [0.0, -0.39, 0.0],
+                    [0.0, -0.05, 0.13],
+                    [-0.01, 0.002, 0.06],
+                    [0.0, 0.093605, 0.0],
+                    [0.0, 0.1, 0.0],
+                    [0.0, 0.28235, 0.0],
+                    [0.0, 0.19265, 0.0],
+                    [0.001, 0.1575, 0.0],
+                    [0.117647, 0.0, 0.0],
+                    [0.245, 0.0, 0.0],
+                    [0.24, 0.0, 0.0],
+                    [0.116353, -0.0025, 0.0],
+                    [-0.001, 0.1575, 0.0],
+                    [-0.117647, 0.0, 0.0],
+                    [-0.245, 0.0, 0.0],
+                    [-0.24, 0.0, 0.0],
+                    [-0.116353, -0.0025, 0.0],
+                ]
+
+                AMASS_JOINT_MAP = {
+                  'pelvis' : 'RootJoint',
+                  'left_hip' : 'lHip',
+                  'right_hip' : 'rHip',
+                  'spine1' : 'pelvis_lowerback',
+                  'spine2' : 'lowerback_torso',
+                  'left_knee' : 'lKnee',
+                  'right_knee' : 'rKnee',
+                  'left_ankle' : 'lAnkle',
+                  'right_ankle' : 'rAnkle',
+                  'left_foot' : 'lToeJoint',
+                  'right_foot' : 'rToeJoint',
+                  'left_collar' : 'lTorso_Clavicle',
+                  'right_collar' : 'rTorso_Clavicle',
+                  'neck' : 'torso_head',
+                  'left_shoulder' : 'lShoulder',
+                  'right_shoulder' : 'rShoulder',
+                  'left_elbow' : 'lElbow',
+                  'right_elbow' : 'rElbow',
+                  'left_wrist' : 'lWrist',
+                  'right_wrist' : 'rWrist'
+                }
                 self.character = character
                 # load the character as initial state
                 self.character.load_init_state()
@@ -13690,8 +13828,15 @@ class ODESim:
                     raise ValueError("End Joint required.")
 
                 # Load BVH File
-                if isinstance(bvh_data, str):
-                    self.bvh = pymotionlib.BVHLoader.load(bvh_data, ignore_root_xz_pos=ignore_root_xz_pos)
+                if bvh_data is None:
+                    self.bvh = pymotionlib.BVHLoader.create_empty_motion(motion_fps, MCVQ_JOINTS=MCVQ_JOINTS, MCVQ_JOINT_OFFSETS=MCVQ_JOINT_OFFSETS, AMASS_JOINT_MAP=AMASS_JOINT_MAP)
+                elif isinstance(bvh_data, str):
+                    if bvh_data.endswith(".bvh"):
+                        self.bvh = pymotionlib.BVHLoader.load(bvh_data, ignore_root_xz_pos=ignore_root_xz_pos)
+                    elif bvh_data.endswith(".npz"):
+                        self.bvh = pymotionlib.BVHLoader.load_amass_npz(bvh_data, smpl_path, ignore_root_xz_pos=ignore_root_xz_pos, MCVQ_JOINTS=MCVQ_JOINTS, MCVQ_JOINT_OFFSETS=MCVQ_JOINT_OFFSETS, AMASS_JOINT_MAP=AMASS_JOINT_MAP)
+                    else:
+                        raise ValueError("Data file extension not supported")
 
                     # TODO: Modify input bvh..
                     # dh1 = self.character.body_info.get_aabb()[2] - np.min(self.bvh.joint_position[0, :, 1])
@@ -13701,6 +13846,20 @@ class ODESim:
                     self.bvh = bvh_data
                 else:
                     raise ValueError
+
+                if self.bvh is not None and bvh_data is not None:
+                    self.init_bvh(character, bvh_fps, flip, bvh_start, bvh_end, smooth_type, set_init_state_as_offset)
+
+            def init_bvh(
+                self,
+                character,
+                bvh_fps: int,
+                flip = None,
+                bvh_start: Optional[int] = None,
+                bvh_end: Optional[int] = None,
+                smooth_type: Union[Common.SmoothOperator.GaussianBase, Common.SmoothOperator.ButterWorthBase, None] = None,
+                set_init_state_as_offset: bool = False
+            ):
                 if flip is not None:
                     self.bvh.flip(flip)
                 self.bvh = self.bvh.sub_sequence(bvh_start, bvh_end, copy=False)
