@@ -359,16 +359,16 @@ class HDF5MotionDataset():
             setattr(self, attribute, self.motions_file['virtual_'+attribute])  
 
 class DPGMotionDataset(MotionDataSet):
-    def __init__(self, fps, character, flip = None):
+    def __init__(self, fps, character, flip = None, motion_fps=None):
         super().__init__(fps)
+        motion_fps = fps if motion_fps is None else motion_fps # fps of live motion capture
         if flip:
-            self.target_base = BVHToTargetBase(None, self.fps, character, flip = np.array([1,0,0]))
+            self.target_base = BVHToTargetBase(None, self.fps, character, flip = np.array([1,0,0]), motion_fps=motion_fps)
         else:
-            self.target_base = BVHToTargetBase(None, self.fps, character)
+            self.target_base = BVHToTargetBase(None, self.fps, character, motion_fps=motion_fps)
         self.curr_target_frame = 0
         self.character = character
         self.flip = np.array([1,0,0]) if flip else None
-            
 
     def add_motion_with_character(self, trans, rot):
       self.target_base.bvh.append_trans_rotation(trans, rot)

@@ -254,9 +254,9 @@ class VCLODETrackEnv():
         real_action = action
         action = Rotation.from_rotvec(action.reshape(-1,3)).as_quat()
         action = MathHelper.flip_quat_by_w(action)
-
+        global_torques = []
         for i in range(self.substep):
-            self.stable_pd.add_torques_by_quat(action)
+            global_torques.append(self.stable_pd.add_torques_by_quat(action))
             if 'force' in kargs:
                 self.add_force(kargs['force'])
             self.scene.damped_simulate(1)
@@ -281,9 +281,9 @@ class VCLODETrackEnv():
         }
 
         if not using_yield: # for convenient, so that we do not have to capture exception
-            yield observation, reward, done, info
+            yield observation, reward, done, info, np.array(global_torques)
         else:
-            return observation, reward, done, info  
+            return observation, reward, done, info, np.array(global_torques)  
     
     def step(self, action, **kargs):
         step_generator = self.step_core(action, **kargs)
