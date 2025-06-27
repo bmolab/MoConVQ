@@ -34,3 +34,7 @@ Stubs were updated with stubs of new functions. Stub files:
 ## Added modules in ModifyODESrc
 
 Modules in CharacterAnimationTools (anim and utils) were imported into ModifyoDESrc to help with reading data from amass files and injecting into MoConVQ's data structure. They are imported as ModifyODESrc/anim and ModifyODESrc/Util
+
+## Updating Implementations
+
+Note that updating implementations may need recompilation to take effect
